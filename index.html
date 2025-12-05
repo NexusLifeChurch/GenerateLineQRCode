@@ -6,232 +6,176 @@
     <title>ลงทะเบียนเข้างาน</title>
     <!-- LIFF SDK -->
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <!-- QRCode Library -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
-    <!-- Tailwind CSS (เพื่อความสวยงามโดยไม่ต้องเขียน CSS เยอะ) -->
+    <!-- QRCode Library (Modern Version) -->
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;600&display=swap" rel="stylesheet">
     <style>
         body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
-        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
     </style>
 </head>
-<body class="flex items-center justify-center min-h-screen p-4">
+<body class="flex flex-col items-center justify-center min-h-screen p-4">
+
+    <!-- Alert Banner (แสดงเมื่อใช้ Demo Mode) -->
+    <div id="demoBanner" class="hidden w-full max-w-sm bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 rounded shadow-sm" role="alert">
+        <p class="font-bold">⚠️ โหมดจำลอง (Demo)</p>
+        <p class="text-sm">กำลังแสดงข้อมูลตัวอย่างเนื่องจาก LIFF ID ไม่ถูกต้อง หรือยังไม่ได้ตั้งค่า</p>
+    </div>
+
+    <!-- Card แสดงผล -->
+    <div id="card" class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center hidden">
+        <div class="mb-4 relative inline-block">
+            <img id="profileImg" class="w-24 h-24 rounded-full mx-auto border-4 border-green-500 shadow-sm object-cover" src="" alt="Profile">
+        </div>
+        <h2 id="displayName" class="text-xl font-bold text-gray-800 mb-1">ชื่อผู้ใช้</h2>
+        <p id="statusMsg" class="text-sm text-gray-500 mb-4 px-2 truncate">สถานะ</p>
+        
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4 flex justify-center flex-col items-center">
+            <p class="text-xs text-gray-400 mb-2">สแกนเพื่อลงทะเบียน</p>
+            <!-- QR Code จะถูกสร้างที่นี่ (ใช้ Canvas แทน Div) -->
+            <canvas id="qrCanvas" class="rounded border border-gray-100"></canvas>
+        </div>
+
+        <p id="genTime" class="text-xs text-gray-400 mb-6">สร้างเมื่อ: --:--</p>
+        
+        <button onclick="sendToChat()" class="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+            </svg>
+            ส่งข้อมูลเข้าแชท
+        </button>
+    </div>
 
     <!-- Loading Screen -->
-    <div id="loading" class="text-center text-gray-600">
-        <svg class="animate-spin h-8 w-8 text-green-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
-            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-        </svg>
-        <p>กำลังเชื่อมต่อ LINE...</p>
-        <p class="text-xs text-gray-400 mt-2">หากค้างนาน ตรวจสอบ LIFF ID</p>
+    <div id="loading" class="text-center">
+        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
+        <p class="text-gray-600">กำลังโหลด...</p>
+        <p id="errorMsg" class="text-red-500 text-sm mt-2 hidden"></p>
     </div>
 
-    <!-- Main Card -->
-    <div id="card" class="bg-white rounded-2xl card-shadow w-full max-w-sm overflow-hidden hidden">
-        <!-- Header -->
-        <div class="bg-green-500 h-24 relative">
-            <div class="absolute -bottom-10 left-1/2 transform -translate-x-1/2">
-                <img id="profileImg" src="https://via.placeholder.com/150" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white object-cover">
-            </div>
-        </div>
-        
-        <!-- Profile Info -->
-        <div class="pt-12 pb-4 text-center px-4">
-            <h1 id="displayName" class="text-xl font-bold text-gray-800">ชื่อผู้ใช้งาน</h1>
-            <p id="statusMsg" class="text-sm text-gray-500 mt-1 truncate">Status Message</p>
-            
-            <div class="mt-4 bg-green-50 px-4 py-2 rounded-lg inline-block">
-                 <p class="text-xs text-green-700 font-semibold">User ID (Last 4): <span id="userIdShort">...</span></p>
-            </div>
-        </div>
-
-        <!-- QR Code Section -->
-        <div class="flex flex-col items-center justify-center bg-gray-50 py-6 border-t border-b border-gray-100">
-            <div id="qrcode" class="p-2 bg-white rounded-lg shadow-sm border"></div>
-            <p class="text-xs text-gray-400 mt-3">แสดง QR Code นี้ให้เจ้าหน้าที่สแกน</p>
-        </div>
-
-        <!-- Timestamp & Action -->
-        <div class="p-4 text-center">
-            <p id="genTime" class="text-xs text-gray-400 mb-4">เวลาสร้าง: -</p>
-            
-            <button onclick="sendToChat()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 flex items-center justify-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                    <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd" />
-                </svg>
-                ส่งข้อมูลเข้าแชท
-            </button>
-        </div>
-    </div>
-
-    <!-- Script -->
     <script>
-        // ******************************************************
-        // 🔴 แก้ไขตรงนี้: ใส่ LIFF ID ที่ถูกต้อง (รูปแบบ XXXXX-XXXXX)
-        const MY_LIFF_ID = "2008560135-aDKZxE9W"; 
-        // ******************************************************
+        // ****************************************************
+        // แก้ไข LIFF ID ตรงนี้ (ต้องเป็นรูปแบบ ตัวเลข-ตัวอักษร)
+        // ดูได้ที่ LINE Developers -> Channel (Login) -> Tab LIFF
+        // ****************************************************
+        const MY_LIFF_ID = "YOUR_LIFF_ID_HERE"; 
+        // ****************************************************
 
-        let profileData = null;
-        let csvContent = "";
+        let csvData = "";
+        let isDemoMode = false;
 
         async function main() {
+            const loadingDiv = document.getElementById('loading');
+
+            // กรณี 1: ยังไม่ได้แก้ ID -> เข้า Demo Mode ทันที
+            if (MY_LIFF_ID === "YOUR_LIFF_ID_HERE" || MY_LIFF_ID === "") {
+                console.warn("LIFF ID not set. Switching to Demo Mode.");
+                useMockData();
+                return;
+            }
+
+            // กรณี 2: มี ID แต่เชื่อมต่อไม่ได้ (เช่น ID ผิด) -> เข้า Demo Mode พร้อมแจ้ง Error ใน Console
             try {
-                // Initialize LIFF
                 await liff.init({ liffId: MY_LIFF_ID });
 
-                // ถ้ายังไม่ Login ให้สั่ง Login
                 if (!liff.isLoggedIn()) {
                     liff.login();
                     return;
                 }
 
-                // ดึงข้อมูลโปรไฟล์
                 const profile = await liff.getProfile();
-                profileData = profile;
-
-                // เตรียมข้อมูลแสดงผล
-                document.getElementById('profileImg').src = profile.pictureUrl || "https://via.placeholder.com/150";
-                document.getElementById('displayName').innerText = profile.displayName;
-                document.getElementById('statusMsg').innerText = profile.statusMessage || "-";
-                document.getElementById('userIdShort').innerText = "..." + profile.userId.slice(-4);
-
-                // เตรียมข้อมูลสำหรับ QR Code (CSV)
-                // รูปแบบ: UserId, DisplayName, URLรูป, ข้อความสถานะ, เวลา
-                const now = new Date();
-                const timeString = now.toLocaleString('th-TH');
-                document.getElementById('genTime').innerText = "เวลาสร้าง: " + timeString;
-
-                // แทนที่เครื่องหมายจุลภาค (,) ในข้อความด้วยช่องว่าง เพื่อไม่ให้ CSV เพี้ยน
-                const cleanName = (profile.displayName || "").replace(/,/g, " ");
-                const cleanStatus = (profile.statusMessage || "").replace(/,/g, " ");
-
-                csvContent = `${profile.userId},${cleanName},${profile.pictureUrl},${cleanStatus},${timeString}`;
-
-                // สร้าง QR Code
-                const qrcodeContainer = document.getElementById("qrcode");
-                qrcodeContainer.innerHTML = ""; // เคลียร์ของเก่า
-                new QRCode(qrcodeContainer, {
-                    text: csvContent,
-                    width: 180,
-                    height: 180,
-                    colorDark : "#000000",
-                    colorLight : "#ffffff",
-                    correctLevel : QRCode.CorrectLevel.M
-                });
-
-                // ซ่อน Loading แสดง Card
-                document.getElementById('loading').style.display = 'none';
-                document.getElementById('card').classList.remove('hidden');
+                renderCard(profile.userId, profile.displayName, profile.pictureUrl, profile.statusMessage);
 
             } catch (err) {
-                console.error("LIFF Error:", err);
-                document.getElementById('loading').innerHTML = `
-                    <p class="text-red-500 font-bold">เกิดข้อผิดพลาด!</p>
-                    <p class="text-sm text-gray-600 mt-2">${err.code || ''} ${err.message}</p>
-                    <p class="text-xs text-gray-400 mt-4">กรุณาตรวจสอบ LIFF ID ในโค้ด</p>
-                `;
+                console.error("LIFF Init Error:", err);
+                useMockData();
             }
         }
 
+        // ฟังก์ชันจำลองข้อมูล (ทำงานเมื่อเชื่อมต่อ LINE ไม่ได้)
+        function useMockData() {
+            isDemoMode = true;
+            document.getElementById('demoBanner').classList.remove('hidden');
+            
+            // ข้อมูลสมมติ
+            const mockProfile = {
+                userId: "U1234567890abcdef1234567890abcdef",
+                displayName: "สมชาย ใจดี (จำลอง)",
+                pictureUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Somchai", 
+                statusMessage: "พร้อมทำงานครับ! (ข้อมูลยาวๆก็รับได้แล้วนะครับ)"
+            };
+
+            renderCard(mockProfile.userId, mockProfile.displayName, mockProfile.pictureUrl, mockProfile.statusMessage);
+        }
+
+        function renderCard(userId, displayName, pictureUrl, statusMessage) {
+            const loadingDiv = document.getElementById('loading');
+            const cardDiv = document.getElementById('card');
+            const errorMsg = document.getElementById('errorMsg');
+
+            const date = new Date();
+            const timeString = date.toLocaleString('th-TH');
+            
+            // Clean Data
+            const cleanName = (displayName || "").replace(/,/g, "");
+            const cleanStatus = (statusMessage || "-").replace(/,/g, "");
+            
+            // CSV Format: ID,Name,Picture,Status,Time
+            csvData = `${userId},${cleanName},${pictureUrl},${cleanStatus},${timeString}`;
+
+            // Render UI
+            document.getElementById('profileImg').src = pictureUrl || "https://via.placeholder.com/150";
+            document.getElementById('displayName').innerText = displayName;
+            document.getElementById('statusMsg').innerText = statusMessage || "-";
+            document.getElementById('genTime').innerText = "สร้างเมื่อ: " + timeString;
+
+            // Generate QR Code using modern library
+            const canvas = document.getElementById('qrCanvas');
+            
+            QRCode.toCanvas(canvas, csvData, { 
+                width: 200,
+                margin: 2,
+                color: {
+                    dark: "#000000",
+                    light: "#ffffff"
+                }
+            }, function (error) {
+                if (error) {
+                    console.error("QR Error:", error);
+                    errorMsg.innerText = "สร้าง QR Code ไม่สำเร็จ: " + error;
+                    errorMsg.style.display = 'block';
+                } else {
+                    loadingDiv.style.display = 'none';
+                    cardDiv.style.display = 'block';
+                }
+            });
+        }
+
         async function sendToChat() {
-            if (!liff.isInClient()) {
-                alert("ฟังก์ชันนี้ใช้ได้เฉพาะบนแอป LINE เท่านั้น");
+            if (isDemoMode) {
+                alert("นี่คือโหมดจำลอง: ข้อมูลจะถูกส่งจริงเมื่อคุณใส่ LIFF ID ที่ถูกต้องและเปิดผ่าน LINE App");
                 return;
             }
-            
+
+            if (!liff.isInClient()) {
+                alert("ฟังก์ชันส่งข้อความใช้งานได้เฉพาะบนแอป LINE ในมือถือเท่านั้น");
+                return;
+            }
+
             try {
-                // ส่ง Flex Message กลับไปที่ห้องแชท
-                // หมายเหตุ: การส่งรูป QR Code ตรงๆ ทำได้ยาก เราจะส่งเป็นข้อมูลสรุปแทน
                 await liff.sendMessages([
                     {
-                        type: "flex",
-                        altText: "ข้อมูลลงทะเบียนของ " + profileData.displayName,
-                        contents: {
-                            "type": "bubble",
-                            "hero": {
-                                "type": "image",
-                                "url": profileData.pictureUrl,
-                                "size": "full",
-                                "aspectRatio": "20:13",
-                                "aspectMode": "cover"
-                            },
-                            "body": {
-                                "type": "box",
-                                "layout": "vertical",
-                                "contents": [
-                                {
-                                    "type": "text",
-                                    "text": profileData.displayName,
-                                    "weight": "bold",
-                                    "size": "xl"
-                                },
-                                {
-                                    "type": "box",
-                                    "layout": "vertical",
-                                    "margin": "lg",
-                                    "spacing": "sm",
-                                    "contents": [
-                                    {
-                                        "type": "box",
-                                        "layout": "baseline",
-                                        "spacing": "sm",
-                                        "contents": [
-                                        {
-                                            "type": "text",
-                                            "text": "สถานะ",
-                                            "color": "#aaaaaa",
-                                            "size": "sm",
-                                            "flex": 1
-                                        },
-                                        {
-                                            "type": "text",
-                                            "text": "พร้อมสแกน",
-                                            "wrap": true,
-                                            "color": "#666666",
-                                            "size": "sm",
-                                            "flex": 5
-                                        }
-                                        ]
-                                    },
-                                    {
-                                        "type": "box",
-                                        "layout": "baseline",
-                                        "spacing": "sm",
-                                        "contents": [
-                                        {
-                                            "type": "text",
-                                            "text": "ข้อมูล",
-                                            "color": "#aaaaaa",
-                                            "size": "sm",
-                                            "flex": 1
-                                        },
-                                        {
-                                            "type": "text",
-                                            "text": csvContent, // ใส่ข้อมูล CSV text ไปเลย
-                                            "wrap": true,
-                                            "color": "#666666",
-                                            "size": "xs",
-                                            "flex": 5
-                                        }
-                                        ]
-                                    }
-                                    ]
-                                }
-                                ]
-                            }
-                        }
+                        type: "text",
+                        text: "ข้อมูลลงทะเบียน:\n" + csvData
                     }
                 ]);
                 liff.closeWindow();
             } catch (err) {
-                console.error(err);
-                alert("ส่งข้อความไม่สำเร็จ: " + err.message);
+                alert("ส่งไม่สำเร็จ: " + err.message);
             }
         }
 
-        // เริ่มทำงาน
         main();
     </script>
 </body>
