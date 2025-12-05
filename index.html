@@ -1,107 +1,237 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="th">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My QR Code Pass</title>
+    <title>ลงทะเบียนเข้างาน</title>
+    <!-- LIFF SDK -->
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <!-- QRCode Library -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Tailwind CSS (เพื่อความสวยงามโดยไม่ต้องเขียน CSS เยอะ) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;700&display=swap" rel="stylesheet">
     <style>
-        body { font-family: 'Sarabun', sans-serif; text-align: center; padding: 20px; background-color: #f0f0f0; }
-        .card { background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); max-width: 400px; margin: auto; }
-        #qrcode { margin-top: 20px; display: flex; justify-content: center; }
-        img.profile { width: 80px; height: 80px; border-radius: 50%; margin-bottom: 10px; }
-        .btn { background-color: #00B900; color: white; border: none; padding: 10px 20px; border-radius: 5px; cursor: pointer; margin-top: 20px; font-size: 16px;}
-        .loading { color: #888; }
+        body { font-family: 'Sarabun', sans-serif; background-color: #f3f4f6; }
+        .card-shadow { box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06); }
     </style>
 </head>
-<body>
+<body class="flex items-center justify-center min-h-screen p-4">
 
-    <div class="card" id="card" style="display:none;">
-        <img id="profileImg" class="profile" src="" alt="Profile">
-        <h2 id="displayName">Name</h2>
-        <p id="statusMsg" style="color:gray; font-size:14px;"></p>
-        <hr>
-        <div id="qrcode"></div>
-        <p id="genTime" style="margin-top:10px; font-size:12px; color:#555;"></p>
-        
-        <button class="btn" onclick="sendToChat()">ส่งเข้าแชทเก็บไว้</button>
+    <!-- Loading Screen -->
+    <div id="loading" class="text-center text-gray-600">
+        <svg class="animate-spin h-8 w-8 text-green-500 mx-auto mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p>กำลังเชื่อมต่อ LINE...</p>
+        <p class="text-xs text-gray-400 mt-2">หากค้างนาน ตรวจสอบ LIFF ID</p>
     </div>
 
-    <div id="loading" class="loading">กำลังโหลดข้อมูล...</div>
-
-    <script>
-        // *** ใส่ LIFF ID ของคุณที่นี่ ***
-        const MY_LIFF_ID = "YOUR_LIFF_ID_HERE"; 
+    <!-- Main Card -->
+    <div id="card" class="bg-white rounded-2xl card-shadow w-full max-w-sm overflow-hidden hidden">
+        <!-- Header -->
+        <div class="bg-green-500 h-24 relative">
+            <div class="absolute -bottom-10 left-1/2 transform -translate-x-1/2">
+                <img id="profileImg" src="https://via.placeholder.com/150" alt="Profile" class="w-20 h-20 rounded-full border-4 border-white object-cover">
+            </div>
+        </div>
         
-        let userProfile = {};
-        let csvData = "";
+        <!-- Profile Info -->
+        <div class="pt-12 pb-4 text-center px-4">
+            <h1 id="displayName" class="text-xl font-bold text-gray-800">ชื่อผู้ใช้งาน</h1>
+            <p id="statusMsg" class="text-sm text-gray-500 mt-1 truncate">Status Message</p>
+            
+            <div class="mt-4 bg-green-50 px-4 py-2 rounded-lg inline-block">
+                 <p class="text-xs text-green-700 font-semibold">User ID (Last 4): <span id="userIdShort">...</span></p>
+            </div>
+        </div>
+
+        <!-- QR Code Section -->
+        <div class="flex flex-col items-center justify-center bg-gray-50 py-6 border-t border-b border-gray-100">
+            <div id="qrcode" class="p-2 bg-white rounded-lg shadow-sm border"></div>
+            <p class="text-xs text-gray-400 mt-3">แสดง QR Code นี้ให้เจ้าหน้าที่สแกน</p>
+        </div>
+
+        <!-- Timestamp & Action -->
+        <div class="p-4 text-center">
+            <p id="genTime" class="text-xs text-gray-400 mb-4">เวลาสร้าง: -</p>
+            
+            <button onclick="sendToChat()" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-xl transition duration-200 flex items-center justify-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.338-3.123C2.493 12.767 2 11.434 2 10c0-3.866 3.582-7 8-7s8 3.134 8 7zM7 9H5v2h2V9zm8 0h-2v2h2V9zM9 9h2v2H9V9z" clip-rule="evenodd" />
+                </svg>
+                ส่งข้อมูลเข้าแชท
+            </button>
+        </div>
+    </div>
+
+    <!-- Script -->
+    <script>
+        // ******************************************************
+        // 🔴 แก้ไขตรงนี้: ใส่ LIFF ID ที่ถูกต้อง (รูปแบบ XXXXX-XXXXX)
+        const MY_LIFF_ID = "YOUR_LIFF_ID_HERE"; 
+        // ******************************************************
+
+        let profileData = null;
+        let csvContent = "";
 
         async function main() {
             try {
+                // Initialize LIFF
                 await liff.init({ liffId: MY_LIFF_ID });
+
+                // ถ้ายังไม่ Login ให้สั่ง Login
                 if (!liff.isLoggedIn()) {
                     liff.login();
                     return;
                 }
 
+                // ดึงข้อมูลโปรไฟล์
                 const profile = await liff.getProfile();
-                userProfile = profile;
-                
-                // 1. เตรียมข้อมูล
-                const date = new Date();
-                const timeString = date.toLocaleString('th-TH');
-                
-                // สร้าง CSV: ID, Name, Pic, Status, Time
-                // ระวัง: การใช้ comma (,) ในข้อมูลอาจทำให้ CSV เพี้ยน ควรแทนที่ก่อน หรือใช้ตัวคั่นอื่น เช่น |
-                csvData = `${profile.userId},${profile.displayName},${profile.pictureUrl},${profile.statusMessage || '-'},${timeString}`;
+                profileData = profile;
 
-                // 2. แสดงผลบนหน้าเว็บ
-                document.getElementById('profileImg').src = profile.pictureUrl;
+                // เตรียมข้อมูลแสดงผล
+                document.getElementById('profileImg').src = profile.pictureUrl || "https://via.placeholder.com/150";
                 document.getElementById('displayName').innerText = profile.displayName;
-                document.getElementById('statusMsg').innerText = profile.statusMessage;
-                document.getElementById('genTime').innerText = "สร้างเมื่อ: " + timeString;
+                document.getElementById('statusMsg').innerText = profile.statusMessage || "-";
+                document.getElementById('userIdShort').innerText = "..." + profile.userId.slice(-4);
 
-                // 3. สร้าง QR Code
-                new QRCode(document.getElementById("qrcode"), {
-                    text: csvData,
-                    width: 200,
-                    height: 200
+                // เตรียมข้อมูลสำหรับ QR Code (CSV)
+                // รูปแบบ: UserId, DisplayName, URLรูป, ข้อความสถานะ, เวลา
+                const now = new Date();
+                const timeString = now.toLocaleString('th-TH');
+                document.getElementById('genTime').innerText = "เวลาสร้าง: " + timeString;
+
+                // แทนที่เครื่องหมายจุลภาค (,) ในข้อความด้วยช่องว่าง เพื่อไม่ให้ CSV เพี้ยน
+                const cleanName = (profile.displayName || "").replace(/,/g, " ");
+                const cleanStatus = (profile.statusMessage || "").replace(/,/g, " ");
+
+                csvContent = `${profile.userId},${cleanName},${profile.pictureUrl},${cleanStatus},${timeString}`;
+
+                // สร้าง QR Code
+                const qrcodeContainer = document.getElementById("qrcode");
+                qrcodeContainer.innerHTML = ""; // เคลียร์ของเก่า
+                new QRCode(qrcodeContainer, {
+                    text: csvContent,
+                    width: 180,
+                    height: 180,
+                    colorDark : "#000000",
+                    colorLight : "#ffffff",
+                    correctLevel : QRCode.CorrectLevel.M
                 });
 
+                // ซ่อน Loading แสดง Card
                 document.getElementById('loading').style.display = 'none';
-                document.getElementById('card').style.display = 'block';
+                document.getElementById('card').classList.remove('hidden');
 
             } catch (err) {
-                console.error(err);
-                alert("เกิดข้อผิดพลาด: " + err.message);
+                console.error("LIFF Error:", err);
+                document.getElementById('loading').innerHTML = `
+                    <p class="text-red-500 font-bold">เกิดข้อผิดพลาด!</p>
+                    <p class="text-sm text-gray-600 mt-2">${err.code || ''} ${err.message}</p>
+                    <p class="text-xs text-gray-400 mt-4">กรุณาตรวจสอบ LIFF ID ในโค้ด</p>
+                `;
             }
         }
 
-        // ฟังก์ชันส่ง Flex Message กลับเข้าห้องแชท
         async function sendToChat() {
             if (!liff.isInClient()) {
-                alert("ฟังก์ชันนี้ใช้ได้เมื่อเปิดผ่าน LINE เท่านั้น");
+                alert("ฟังก์ชันนี้ใช้ได้เฉพาะบนแอป LINE เท่านั้น");
                 return;
             }
             
             try {
-                // สร้าง Flex Message จำลอง (คุณต้องไปออกแบบ JSON Flex ให้สวยงามใน Line Bot Designer)
-                // ข้อจำกัด: liff.sendMessages ส่งรูป QR Code ที่ gen จาก canvas โดยตรงยาก 
-                // ปกติเราจะส่งเป็น Text ข้อมูล หรือ Link แทน หรือต้องมี Server Gen รูป
-                // แต่เบื้องต้นส่งเป็นข้อมูลสรุปไปก่อน
+                // ส่ง Flex Message กลับไปที่ห้องแชท
+                // หมายเหตุ: การส่งรูป QR Code ตรงๆ ทำได้ยาก เราจะส่งเป็นข้อมูลสรุปแทน
                 await liff.sendMessages([
                     {
-                        type: "text",
-                        text: "ข้อมูลลงทะเบียนของฉัน:\n" + csvData
+                        type: "flex",
+                        altText: "ข้อมูลลงทะเบียนของ " + profileData.displayName,
+                        contents: {
+                            "type": "bubble",
+                            "hero": {
+                                "type": "image",
+                                "url": profileData.pictureUrl,
+                                "size": "full",
+                                "aspectRatio": "20:13",
+                                "aspectMode": "cover"
+                            },
+                            "body": {
+                                "type": "box",
+                                "layout": "vertical",
+                                "contents": [
+                                {
+                                    "type": "text",
+                                    "text": profileData.displayName,
+                                    "weight": "bold",
+                                    "size": "xl"
+                                },
+                                {
+                                    "type": "box",
+                                    "layout": "vertical",
+                                    "margin": "lg",
+                                    "spacing": "sm",
+                                    "contents": [
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "spacing": "sm",
+                                        "contents": [
+                                        {
+                                            "type": "text",
+                                            "text": "สถานะ",
+                                            "color": "#aaaaaa",
+                                            "size": "sm",
+                                            "flex": 1
+                                        },
+                                        {
+                                            "type": "text",
+                                            "text": "พร้อมสแกน",
+                                            "wrap": true,
+                                            "color": "#666666",
+                                            "size": "sm",
+                                            "flex": 5
+                                        }
+                                        ]
+                                    },
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "spacing": "sm",
+                                        "contents": [
+                                        {
+                                            "type": "text",
+                                            "text": "ข้อมูล",
+                                            "color": "#aaaaaa",
+                                            "size": "sm",
+                                            "flex": 1
+                                        },
+                                        {
+                                            "type": "text",
+                                            "text": csvContent, // ใส่ข้อมูล CSV text ไปเลย
+                                            "wrap": true,
+                                            "color": "#666666",
+                                            "size": "xs",
+                                            "flex": 5
+                                        }
+                                        ]
+                                    }
+                                    ]
+                                }
+                                ]
+                            }
+                        }
                     }
                 ]);
                 liff.closeWindow();
             } catch (err) {
-                alert("ส่งข้อความไม่สำเร็จ: " + err);
+                console.error(err);
+                alert("ส่งข้อความไม่สำเร็จ: " + err.message);
             }
         }
 
+        // เริ่มทำงาน
         main();
     </script>
 </body>
