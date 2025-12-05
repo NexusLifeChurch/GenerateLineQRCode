@@ -210,7 +210,12 @@
                 await liff.sendMessages([flexMsg]);
                 liff.closeWindow();
             } catch (err) {
-                alert("ส่งข้อความไม่สำเร็จ: " + err.message);
+                console.error("Send Error:", err);
+                if (err.message.includes("scope") || err.message.includes("permission")) {
+                    alert("⚠️ ส่งไม่สำเร็จ: กรุณาเปิดสิทธิ์ 'chat_message.write' ใน LINE Developers Console\n\n(ไปที่ Channel -> LIFF -> Scopes -> ติ๊กถูก chat_message.write)");
+                } else {
+                    alert("ส่งข้อความไม่สำเร็จ: " + err.message);
+                }
             }
         }
 
