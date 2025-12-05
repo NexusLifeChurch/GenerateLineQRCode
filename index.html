@@ -6,7 +6,7 @@
     <title>ลงทะเบียนเข้างาน</title>
     <!-- LIFF SDK -->
     <script charset="utf-8" src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
-    <!-- QRCode Library (Modern Version) -->
+    <!-- QRCode Library -->
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
@@ -16,12 +16,6 @@
     </style>
 </head>
 <body class="flex flex-col items-center justify-center min-h-screen p-4">
-
-    <!-- Alert Banner (แสดงเมื่อใช้ Demo Mode) -->
-    <div id="demoBanner" class="hidden w-full max-w-sm bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 rounded shadow-sm" role="alert">
-        <p class="font-bold">⚠️ โหมดจำลอง (Demo)</p>
-        <p class="text-sm">กำลังแสดงข้อมูลตัวอย่างเนื่องจาก LIFF ID ไม่ถูกต้อง หรือยังไม่ได้ตั้งค่า</p>
-    </div>
 
     <!-- Card แสดงผล -->
     <div id="card" class="bg-white rounded-xl shadow-lg p-6 w-full max-w-sm text-center hidden">
@@ -33,49 +27,42 @@
         
         <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-4 flex justify-center flex-col items-center">
             <p class="text-xs text-gray-400 mb-2">สแกนเพื่อลงทะเบียน</p>
-            <!-- QR Code จะถูกสร้างที่นี่ (ใช้ Canvas แทน Div) -->
+            <!-- QR Code แสดงผลที่นี่ -->
             <canvas id="qrCanvas" class="rounded border border-gray-100"></canvas>
         </div>
 
         <p id="genTime" class="text-xs text-gray-400 mb-6">สร้างเมื่อ: --:--</p>
         
-        <button onclick="sendToChat()" class="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2">
+        <button onclick="sendFlexMessage()" class="w-full bg-[#06C755] hover:bg-[#05b34c] text-white font-bold py-3 px-4 rounded-lg transition duration-200 flex items-center justify-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />
             </svg>
-            ส่งข้อมูลเข้าแชท
+            ส่งหลักฐานเข้าแชท (Flex)
         </button>
     </div>
 
     <!-- Loading Screen -->
     <div id="loading" class="text-center">
         <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4"></div>
-        <p class="text-gray-600">กำลังโหลด...</p>
+        <p class="text-gray-600">กำลังโหลดข้อมูล...</p>
         <p id="errorMsg" class="text-red-500 text-sm mt-2 hidden"></p>
     </div>
 
     <script>
         // ****************************************************
-        // แก้ไข LIFF ID ตรงนี้ (ต้องเป็นรูปแบบ ตัวเลข-ตัวอักษร)
-        // ดูได้ที่ LINE Developers -> Channel (Login) -> Tab LIFF
+        // LIFF ID ของคุณ
         // ****************************************************
         const MY_LIFF_ID = "2008560135-aDKZxE9W"; 
         // ****************************************************
 
+        let userProfile = null;
+        let timeString = "";
         let csvData = "";
-        let isDemoMode = false;
 
         async function main() {
             const loadingDiv = document.getElementById('loading');
+            const errorMsg = document.getElementById('errorMsg');
 
-            // กรณี 1: ยังไม่ได้แก้ ID -> เข้า Demo Mode ทันที
-            if (MY_LIFF_ID === "YOUR_LIFF_ID_HERE" || MY_LIFF_ID === "") {
-                console.warn("LIFF ID not set. Switching to Demo Mode.");
-                useMockData();
-                return;
-            }
-
-            // กรณี 2: มี ID แต่เชื่อมต่อไม่ได้ (เช่น ID ผิด) -> เข้า Demo Mode พร้อมแจ้ง Error ใน Console
             try {
                 await liff.init({ liffId: MY_LIFF_ID });
 
@@ -85,65 +72,45 @@
                 }
 
                 const profile = await liff.getProfile();
-                renderCard(profile.userId, profile.displayName, profile.pictureUrl, profile.statusMessage);
+                userProfile = profile;
+                renderCard(profile);
 
             } catch (err) {
-                console.error("LIFF Init Error:", err);
-                useMockData();
+                console.error("LIFF Error:", err);
+                errorMsg.innerText = "Error: " + err.message;
+                errorMsg.style.display = 'block';
+                loadingDiv.querySelector('.animate-spin').style.display = 'none';
             }
         }
 
-        // ฟังก์ชันจำลองข้อมูล (ทำงานเมื่อเชื่อมต่อ LINE ไม่ได้)
-        function useMockData() {
-            isDemoMode = true;
-            document.getElementById('demoBanner').classList.remove('hidden');
-            
-            // ข้อมูลสมมติ
-            const mockProfile = {
-                userId: "U1234567890abcdef1234567890abcdef",
-                displayName: "สมชาย ใจดี (จำลอง)",
-                pictureUrl: "https://api.dicebear.com/7.x/avataaars/svg?seed=Somchai", 
-                statusMessage: "พร้อมทำงานครับ! (ข้อมูลยาวๆก็รับได้แล้วนะครับ)"
-            };
-
-            renderCard(mockProfile.userId, mockProfile.displayName, mockProfile.pictureUrl, mockProfile.statusMessage);
-        }
-
-        function renderCard(userId, displayName, pictureUrl, statusMessage) {
+        function renderCard(profile) {
             const loadingDiv = document.getElementById('loading');
             const cardDiv = document.getElementById('card');
             const errorMsg = document.getElementById('errorMsg');
 
             const date = new Date();
-            const timeString = date.toLocaleString('th-TH');
+            timeString = date.toLocaleString('th-TH');
             
-            // Clean Data
-            const cleanName = (displayName || "").replace(/,/g, "");
-            const cleanStatus = (statusMessage || "-").replace(/,/g, "");
-            
-            // CSV Format: ID,Name,Picture,Status,Time
-            csvData = `${userId},${cleanName},${pictureUrl},${cleanStatus},${timeString}`;
+            // เตรียมข้อมูล CSV
+            const cleanName = (profile.displayName || "").replace(/,/g, "");
+            const cleanStatus = (profile.statusMessage || "-").replace(/,/g, "");
+            csvData = `${profile.userId},${cleanName},${profile.pictureUrl},${cleanStatus},${timeString}`;
 
-            // Render UI
-            document.getElementById('profileImg').src = pictureUrl || "https://via.placeholder.com/150";
-            document.getElementById('displayName').innerText = displayName;
-            document.getElementById('statusMsg').innerText = statusMessage || "-";
+            // แสดงผล UI
+            document.getElementById('profileImg').src = profile.pictureUrl || "https://via.placeholder.com/150";
+            document.getElementById('displayName').innerText = profile.displayName;
+            document.getElementById('statusMsg').innerText = profile.statusMessage || "-";
             document.getElementById('genTime').innerText = "สร้างเมื่อ: " + timeString;
 
-            // Generate QR Code using modern library
+            // สร้าง QR Code
             const canvas = document.getElementById('qrCanvas');
-            
             QRCode.toCanvas(canvas, csvData, { 
                 width: 200,
                 margin: 2,
-                color: {
-                    dark: "#000000",
-                    light: "#ffffff"
-                }
+                color: { dark: "#000000", light: "#ffffff" }
             }, function (error) {
                 if (error) {
-                    console.error("QR Error:", error);
-                    errorMsg.innerText = "สร้าง QR Code ไม่สำเร็จ: " + error;
+                    errorMsg.innerText = "QR Error: " + error;
                     errorMsg.style.display = 'block';
                 } else {
                     loadingDiv.style.display = 'none';
@@ -152,27 +119,98 @@
             });
         }
 
-        async function sendToChat() {
-            if (isDemoMode) {
-                alert("นี่คือโหมดจำลอง: ข้อมูลจะถูกส่งจริงเมื่อคุณใส่ LIFF ID ที่ถูกต้องและเปิดผ่าน LINE App");
+        async function sendFlexMessage() {
+            if (!liff.isInClient()) {
+                alert("ฟังก์ชันนี้ใช้งานได้เฉพาะบนแอป LINE เท่านั้น");
                 return;
             }
 
-            if (!liff.isInClient()) {
-                alert("ฟังก์ชันส่งข้อความใช้งานได้เฉพาะบนแอป LINE ในมือถือเท่านั้น");
-                return;
-            }
+            if (!userProfile) return;
+
+            // สร้าง JSON Flex Message
+            const flexMsg = {
+                type: "flex",
+                altText: "ข้อมูลลงทะเบียนเข้างานของ " + userProfile.displayName,
+                contents: {
+                    "type": "bubble",
+                    "hero": {
+                        "type": "image",
+                        "url": userProfile.pictureUrl || "https://via.placeholder.com/500x300?text=No+Image",
+                        "size": "full",
+                        "aspectRatio": "20:13",
+                        "aspectMode": "cover",
+                        "action": { "type": "uri", "uri": "https://line.me/" }
+                    },
+                    "body": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "Registration Pass",
+                                "weight": "bold",
+                                "size": "xl",
+                                "color": "#1DB446"
+                            },
+                            {
+                                "type": "box",
+                                "layout": "vertical",
+                                "margin": "lg",
+                                "spacing": "sm",
+                                "contents": [
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "spacing": "sm",
+                                        "contents": [
+                                            { "type": "text", "text": "Name", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                            { "type": "text", "text": userProfile.displayName, "wrap": true, "color": "#666666", "size": "sm", "flex": 5, "weight": "bold" }
+                                        ]
+                                    },
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "spacing": "sm",
+                                        "contents": [
+                                            { "type": "text", "text": "Time", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                            { "type": "text", "text": timeString, "wrap": true, "color": "#666666", "size": "sm", "flex": 5 }
+                                        ]
+                                    },
+                                    {
+                                        "type": "box",
+                                        "layout": "baseline",
+                                        "spacing": "sm",
+                                        "contents": [
+                                            { "type": "text", "text": "Status", "color": "#aaaaaa", "size": "sm", "flex": 1 },
+                                            { "type": "text", "text": "Ready to scan", "wrap": true, "color": "#666666", "size": "sm", "flex": 5 }
+                                        ]
+                                    }
+                                ]
+                            }
+                        ]
+                    },
+                    "footer": {
+                        "type": "box",
+                        "layout": "vertical",
+                        "spacing": "sm",
+                        "contents": [
+                            {
+                                "type": "text",
+                                "text": "User ID: " + userProfile.userId.substring(0, 10) + "...",
+                                "size": "xxs",
+                                "color": "#aaaaaa",
+                                "align": "center"
+                            }
+                        ]
+                    }
+                }
+            };
 
             try {
-                await liff.sendMessages([
-                    {
-                        type: "text",
-                        text: "ข้อมูลลงทะเบียน:\n" + csvData
-                    }
-                ]);
+                await liff.sendMessages([flexMsg]);
                 liff.closeWindow();
             } catch (err) {
-                alert("ส่งไม่สำเร็จ: " + err.message);
+                alert("ส่งข้อความไม่สำเร็จ: " + err.message);
             }
         }
 
